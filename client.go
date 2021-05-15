@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC
+// Copyright 2021 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	v1 "google.golang.org/genproto/googleapis/maps/routes/v1"
+	v1alpha "google.golang.org/genproto/googleapis/maps/routes/v1alpha"
 	"google.golang.org/genproto/googleapis/type/latlng"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -75,6 +76,38 @@ func callComputeRoutes(client v1.RoutesPreferredClient, ctx *context.Context) {
 	log.Printf("Result: %s", marshaler.Text(result))
 }
 
+func callComputeCustomRoutes(client v1alpha.RoutesAlphaClient, ctx *context.Context) {
+	request := v1.ComputeCustomRoutesRequest{
+		Origin:      createWaypoint(37.420761, -122.081356),
+		Destination: createWaypoint(37.420999, -122.086894),
+		RouteObjective: &v1.RouteObjective{
+			Objective: &v1.RouteObjective_RateCard_{
+				RateCard: &v1.RouteObjective_RateCard{
+					CostPerMinute: &v1.RouteObjective_RateCard_MonetaryCost{Value: 1.1},
+				},
+			},
+		},
+		TravelMode:        v1.RouteTravelMode_DRIVE,
+		RoutingPreference: v1.RoutingPreference_TRAFFIC_AWARE,
+		Units:             v1.Units_METRIC,
+		LanguageCode:      "en-us",
+		RouteModifiers: &v1.RouteModifiers{
+			AvoidTolls:    false,
+			AvoidHighways: true,
+			AvoidFerries:  true,
+		},
+		PolylineQuality: v1.PolylineQuality_OVERVIEW,
+	}
+	marshaler := proto.TextMarshaler{}
+	log.Printf("Sending request: \n%s", marshaler.Text(&request))
+	result, err := client.ComputeCustomRoutes(*ctx, &request)
+
+	if err != nil {
+		log.Fatalf("Failed to call ComputeCustomRoutes: %v", err)
+	}
+	log.Printf("Result: %s", marshaler.Text(result))
+}
+
 func callComputeRouteMatrix(client v1.RoutesPreferredClient, ctx *context.Context) {
 	request := v1.ComputeRouteMatrixRequest{
 		Origins: []*v1.RouteMatrixOrigin{
@@ -120,12 +153,15 @@ func main() {
 	}
 	defer conn.Close()
 	client := v1.NewRoutesPreferredClient(conn)
+	clientalpha := v1alpha.NewRoutesAlphaClient(conn)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	ctx = metadata.AppendToOutgoingContext(ctx, "X-Goog-Api-Key", os.Getenv("GOOGLE_MAPS_API_KEY"))
 	ctx = metadata.AppendToOutgoingContext(ctx, "X-Goog-Fieldmask", fieldMask)
 	defer cancel()
 
 	callComputeRoutes(client, &ctx)
+	callComputeCustomRoutes(clientalpha, &ctx)
 	callComputeRouteMatrix(client, &ctx)
 }
+
 // [END maps_routespreferred_samples_default]
